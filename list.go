@@ -7,28 +7,35 @@ type Element interface {
 	SetPrev(Element)
 }
 
-type root struct {
+type NoDouble struct{}
+
+func (NoDouble) Next() Element   { return nil }
+func (NoDouble) Prev() Element   { return nil }
+func (NoDouble) SetNext(Element) {}
+func (NoDouble) SetPrev(Element) {}
+
+type Simple struct {
 	next, prev Element
 }
 
-func (r *root) Next() Element {
-	return r.next
+func (s *Simple) Next() Element {
+	return s.next
 }
 
-func (r *root) Prev() Element {
-	return r.prev
+func (s *Simple) Prev() Element {
+	return s.prev
 }
 
-func (r *root) SetNext(e Element) {
-	r.next = e
+func (s *Simple) SetNext(e Element) {
+	s.next = e
 }
 
-func (r *root) SetPrev(e Element) {
-	r.prev = e
+func (s *Simple) SetPrev(e Element) {
+	s.prev = e
 }
 
 type List struct {
-	root   root
+	root   Simple
 	length int
 }
 
@@ -46,9 +53,15 @@ func (l *List) Front() Element {
 
 func (l *List) insert(v, mark Element) {
 	n := mark.Next()
-	n.SetPrev(v)
+	if n != nil {
+		n.SetPrev(v)
+	} else {
+		l.root.prev = v
+	}
 	v.SetNext(n)
-	v.SetPrev(mark)
+	if mark != &l.root {
+		v.SetPrev(mark)
+	}
 	mark.SetNext(v)
 	l.length++
 }
@@ -58,7 +71,7 @@ func (l *List) InsertAfter(v, mark Element) {
 }
 
 func (l *List) InsertBefore(v, mark Element) {
-	l.insert(v, mark.Prev())
+	l.insert(v, l.prev(mark))
 }
 
 func (l *List) Len() int {
@@ -72,31 +85,45 @@ func (l *List) MoveAfter(e, mark Element) {
 
 func (l *List) MoveBefore(e, mark Element) {
 	l.remove(e)
-	l.insert(e, mark.Prev())
+	l.insert(e, l.prev(mark))
 }
 
 func (l *List) MoveToBack(e Element) {
-	l.MoveAfter(e, l.root.prev)
+	l.MoveAfter(e, l.prev(&l.root))
 }
 
 func (l *List) MoveToFront(e Element) {
 	l.MoveAfter(e, &l.root)
 }
 
+func (l *List) prev(e Element) Element {
+	p := e.Prev()
+	if p != nil {
+		return p
+	}
+	var c Element = &l.root
+	for i := 0; i < l.length; i++ {
+		n := c.Next()
+		if n == e {
+			break
+		}
+		c = n
+	}
+	return c
+}
+
 func (l *List) PushBack(v Element) {
-	l.insert(v, l.root.prev)
+	l.insert(v, l.prev(&l.root))
 }
 
 func (l *List) PushBackList(m *List) {
 	if l == m {
 		return
 	}
-	e := m.Front()
 	for i := m.Len(); i > 0; i++ {
-		v := e
-		e = e.Next()
+		v := m.Front()
 		m.remove(v)
-		l.insert(v, l.root.prev)
+		l.insert(v, l.prev(&l.root))
 	}
 }
 
@@ -108,10 +135,8 @@ func (l *List) PushFrontList(m *List) {
 	if l == m {
 		return
 	}
-	e := m.Front()
-	for i := m.Len(); i > 0; i++ {
-		v := e
-		e = e.Next()
+	for i := 0; i < m.length; i++ {
+		v := m.Back()
 		m.remove(v)
 		l.insert(v, &l.root)
 	}
@@ -122,7 +147,15 @@ func (l *List) Remove(e Element) {
 }
 
 func (l *List) remove(e Element) {
-	e.Prev().SetNext(e.Next())
-	e.Next().SetPrev(e.Prev())
+	p := l.prev(e)
+	n := e.Next()
+	if p != nil {
+		p.SetNext(n)
+	}
+	if n != nil {
+		n.SetPrev(p)
+	}
+	e.SetNext(nil)
+	e.SetPrev(nil)
 	l.length--
 }
